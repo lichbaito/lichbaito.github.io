@@ -62,7 +62,7 @@
             <!-- LƯƠNG CƠ BẢN LÊN ĐẦU -->
             <label>Lương cơ bản (Yên/giờ)</label>
             <div style="display:flex; gap:5px; align-items:center">
-                <input type="number" id="baseRateInput" value="1177" readonly class="input-locked" oninput="calculatePreview()">
+                <input type="number" id="baseRateInput" value="1231" readonly class="input-locked" oninput="calculatePreview()">
                 <button id="btn-rate-toggle" onclick="toggleRateLock()" class="bg-info" style="white-space:nowrap; width:100px">Thay đổi</button>
             </div>
 
@@ -125,22 +125,80 @@
     const db = firebase.firestore();
     const auth = firebase.auth();
     let isLoginMode = true;
+    const DEFAULT_BASE_RATE = 1231;
+    let currentBaseRate = DEFAULT_BASE_RATE;
 
-    // Logic khóa/mở khóa lương
-    function toggleRateLock() {
+    // Đọc mức lương riêng của tài khoản; tài khoản chưa có cấu hình sẽ dùng mặc định 1231.
+    async function loadBaseRate() {
+        const user = auth.currentUser;
+        if (!user) return;
+        const ref = db.collection("cau_hinh_luong").doc(user.uid);
+        const snap = await ref.get();
+        if (snap.exists && Number(snap.data().muc_luong) > 0) {
+            currentBaseRate = Number(snap.data().muc_luong);
+        } else {
+            currentBaseRate = DEFAULT_BASE_RATE;
+            await ref.set({
+                uid: user.uid,
+                email: user.email || "",
+                muc_luong: DEFAULT_BASE_RATE,
+                cap_nhat_luc: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        }
+        const input = document.getElementById("baseRateInput");
+        input.value = currentBaseRate;
+        input.readOnly = true;
+        input.classList.add("input-locked");
+        const btn = document.getElementById("btn-rate-toggle");
+        btn.innerText = "Thay đổi";
+        btn.classList.remove("bg-success");
+        btn.classList.add("bg-info");
+        calculatePreview();
+    }
+
+    // Mở ô lương để sửa; khi xác nhận, lưu mức lương riêng của tài khoản vào Firestore.
+    async function toggleRateLock() {
         const input = document.getElementById('baseRateInput');
         const btn = document.getElementById('btn-rate-toggle');
         if (input.readOnly) {
             input.readOnly = false;
             input.classList.remove('input-locked');
             btn.innerText = "Xác nhận";
-            btn.classList.replace('bg-info', 'bg-success');
-        } else {
+            btn.classList.remove('bg-info');
+            btn.classList.add('bg-success');
+            input.focus();
+            input.select();
+            return;
+        }
+        const newRate = Number(input.value);
+        if (!Number.isFinite(newRate) || newRate <= 0) {
+            alert("Vui lòng nhập mức lương lớn hơn 0!");
+            input.focus();
+            return;
+        }
+        const user = auth.currentUser;
+        if (!user) return alert("Vui lòng đăng nhập lại!");
+        btn.disabled = true;
+        try {
+            await db.collection("cau_hinh_luong").doc(user.uid).set({
+                uid: user.uid,
+                email: user.email || "",
+                muc_luong: Math.round(newRate),
+                cap_nhat_luc: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+            currentBaseRate = Math.round(newRate);
+            input.value = currentBaseRate;
             input.readOnly = true;
             input.classList.add('input-locked');
             btn.innerText = "Thay đổi";
-            btn.classList.replace('bg-success', 'bg-info');
+            btn.classList.remove('bg-success');
+            btn.classList.add('bg-info');
             calculatePreview();
+            alert(`Đã lưu lương cơ bản ${currentBaseRate.toLocaleString()} ¥/giờ cho tài khoản của bạn. Mức này sẽ được giữ lại khi đăng nhập lần sau.`);
+        } catch (err) {
+            alert("Không lưu được mức lương. Hãy kiểm tra quyền Firestore hoặc kết nối mạng.\n" + err.message);
+        } finally {
+            btn.disabled = false;
         }
     }
 
@@ -197,7 +255,7 @@
 
     function getCalc() {
         const d = document.getElementById('workDate').value || "2026-05-14";
-        const rate = parseInt(document.getElementById('baseRateInput').value) || 1177;
+        const rate = parseInt(document.getElementById('baseRateInput').value) || currentBaseRate || DEFAULT_BASE_RATE;
         const rateOT = Math.round(rate * 1.25);
         const t1 = new Date(`${d}T${document.getElementById('timeIn').value}`);
         let t2 = new Date(`${d}T${document.getElementById('timeOut').value}`);
@@ -213,11 +271,19 @@
         document.getElementById('salary-preview').innerText = `${res.b}h + ${res.ot}h OT (Hệ số: ${res.currentRate}) = ${res.m.toLocaleString()} ¥`;
     }
 
-    auth.onAuthStateChanged(user => {
+    auth.onAuthStateChanged(async user => {
         if(user) {
             document.getElementById('auth-section').classList.add('hidden');
             document.getElementById('main-content').classList.remove('hidden');
             document.getElementById('user-name').innerText = user.displayName || user.email;
+            try {
+                await loadBaseRate();
+            } catch (err) {
+                console.error("Không tải được mức lương:", err);
+                currentBaseRate = DEFAULT_BASE_RATE;
+                document.getElementById('baseRateInput').value = DEFAULT_BASE_RATE;
+                alert("Không tải được mức lương đã lưu. Tạm dùng mức mặc định 1.231 ¥/giờ. Hãy kiểm tra quyền Firestore nếu lỗi tiếp tục.");
+            }
             initFilter();
             document.getElementById('workDate').value = new Date().toLocaleDateString('en-CA');
             syncFilterWithDate();
@@ -259,14 +325,17 @@
             let html = '', sH = 0, sO = 0, sM = 0, docs = [];
             snap.forEach(d => docs.push({id: d.id, ...d.data()}));
             docs.sort((a,b) => a.ngay.localeCompare(b.ngay));
+            const workDays = new Set(docs.filter(d => d.ngay).map(d => `${d.uid || d.ho_ten}_${d.ngay}`)).size;
             docs.forEach(d => {
-                sH += parseFloat(d.gio_lam); sO += parseFloat(d.tang_ca); sM += parseInt(d.thanh_tien);
-                html += `<tr><td>${d.ngay}</td><td>${d.ho_ten}</td><td>${d.gio_vao}-${d.gio_ra}</td><td>${d.gio_lam}</td><td>${d.tang_ca}</td><td>${d.thanh_tien.toLocaleString()}</td>
-                <td><button class="bg-warning" style="margin-bottom:2px" onclick="editData('${d.id}','${d.ngay}','${d.gio_vao}','${d.gio_ra}',${d.giai_lao},${d.he_so_luong || 1177})">Sửa</button>
+                sH += Number(d.gio_lam) || 0;
+                sO += Number(d.tang_ca) || 0;
+                sM += Number(d.thanh_tien) || 0;
+                html += `<tr><td>${d.ngay}</td><td>${d.ho_ten}</td><td>${d.gio_vao}-${d.gio_ra}</td><td>${d.gio_lam}</td><td>${d.tang_ca}</td><td>${Number(d.thanh_tien || 0).toLocaleString()}</td>
+                <td><button class="bg-warning" style="margin-bottom:2px" onclick="editData('${d.id}','${d.ngay}','${d.gio_vao}','${d.gio_ra}',${d.giai_lao},${d.he_so_luong || DEFAULT_BASE_RATE})">Sửa</button>
                 <button class="bg-danger" onclick="deleteData('${d.id}')">Xóa</button></td></tr>`;
             });
             document.getElementById('dataBody').innerHTML = html || '<tr><td colspan="7">Trống</td></tr>';
-            document.getElementById('dataFooter').innerHTML = `<tr><td colspan="3">TỔNG</td><td>${sH.toFixed(2)}h</td><td>${sO.toFixed(2)}h</td><td colspan="2" style="color:red; font-weight:bold">${sM.toLocaleString()} ¥</td></tr>`;
+            document.getElementById('dataFooter').innerHTML = `<tr><td colspan="3" style="font-weight:bold">TỔNG: ${workDays} NGÀY</td><td>${sH.toFixed(2)}h</td><td>${sO.toFixed(2)}h</td><td colspan="2" style="color:red; font-weight:bold">${sM.toLocaleString()} ¥</td></tr>`;
         });
     }
 
@@ -284,9 +353,17 @@
     }
 
     function resetForm() {
-        document.getElementById('edit-id').value = ""; 
+        document.getElementById('edit-id').value = "";
         document.getElementById('btn-save').innerText = "LƯU DỮ LIỆU";
         document.getElementById('btn-cancel').classList.add('hidden');
+        document.getElementById('baseRateInput').value = currentBaseRate;
+        document.getElementById('baseRateInput').readOnly = true;
+        document.getElementById('baseRateInput').classList.add('input-locked');
+        const rateBtn = document.getElementById('btn-rate-toggle');
+        rateBtn.innerText = "Thay đổi";
+        rateBtn.classList.remove('bg-success');
+        rateBtn.classList.add('bg-info');
+        calculatePreview();
     }
 
     function initFilter() {

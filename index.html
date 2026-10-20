@@ -291,23 +291,48 @@
     });
 
     async function saveData() {
-        const u = auth.currentUser, d = document.getElementById('workDate').value, id = document.getElementById('edit-id').value;
-        if(!d) return alert("Chọn ngày!");
+        const u = auth.currentUser;
+        const d = document.getElementById('workDate').value;
+        const id = document.getElementById('edit-id').value;
+        if (!u) return alert("Vui lòng đăng nhập lại!");
+        if (!d) return alert("Chọn ngày!");
+
         const res = getCalc();
-        const data = {
-            uid: u.uid, ho_ten: u.displayName || u.email, ngay: d,
-            gio_vao: document.getElementById('timeIn').value, gio_ra: document.getElementById('timeOut').value,
-            giai_lao: document.getElementById('breakMin').value, 
-            he_so_luong: res.currentRate,
-            gio_lam: res.b, tang_ca: res.ot,
-            thanh_tien: res.m, thang_nam: d.substring(0, 7)
-        };
+        // Khi cập nhật bản ghi cũ (đặc biệt khi quản trị sửa cho nhân viên),
+        // giữ nguyên UID và tên của chủ bản ghi; không đổi thành thông tin quản trị.
+        let recordUid = u.uid;
+        let recordName = u.displayName || u.email || "";
         try {
-            if(id) await db.collection("bang_luong").doc(id).update(data);
+            if (id) {
+                const oldSnap = await db.collection("bang_luong").doc(id).get();
+                if (!oldSnap.exists) return alert("Không tìm thấy bản ghi cần sửa. Hãy tải lại danh sách.");
+                const oldData = oldSnap.data() || {};
+                recordUid = oldData.uid || u.uid;
+                recordName = oldData.ho_ten || recordName;
+            }
+
+            const data = {
+                uid: recordUid,
+                ho_ten: recordName,
+                ngay: d,
+                gio_vao: document.getElementById('timeIn').value,
+                gio_ra: document.getElementById('timeOut').value,
+                giai_lao: document.getElementById('breakMin').value,
+                he_so_luong: res.currentRate,
+                gio_lam: res.b,
+                tang_ca: res.ot,
+                thanh_tien: res.m,
+                thang_nam: d.substring(0, 7)
+            };
+
+            if (id) await db.collection("bang_luong").doc(id).update(data);
             else await db.collection("bang_luong").add(data);
             alert("Đã lưu dữ liệu!");
             resetForm();
-        } catch(e) { alert(e.message); }
+        } catch (e) {
+            console.error("Lỗi lưu dữ liệu:", e);
+            alert("Không lưu được dữ liệu: " + (e.message || e));
+        }
     }
 
     async function deleteData(id) {

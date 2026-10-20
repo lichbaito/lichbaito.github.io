@@ -1,116 +1,30 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quản Lý Thời gian làm việc</title>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <style>
-        :root { --primary: #0056b3; --success: #28a745; --danger: #dc3545; --warning: #ffc107; --info: #17a2b8; }
-        body { font-family: -apple-system, sans-serif; background: #f0f2f5; margin: 0; padding: 8px; }
-        .container { max-width: 1000px; margin: auto; }
-        .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 15px; }
-        input, select { width: 100%; padding: 10px; margin: 4px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
-        button { cursor: pointer; border: none; border-radius: 6px; font-weight: bold; font-size: 13px; padding: 10px; }
-        .btn-main { background: var(--primary); color: white; width: 100%; text-transform: uppercase; margin-top: 10px; }
-        .btn-sm { color: white; padding: 6px 12px; }
-        .bg-success { background: var(--success); }
-        .bg-danger { background: var(--danger); }
-        .bg-warning { background: var(--warning); color: black; }
-        .bg-info { background: var(--info); }
-        .hidden { display: none !important; }
-        .table-wrapper { overflow-x: auto; margin-top: 10px; }
-        table { width: 100%; border-collapse: collapse; min-width: 700px; background: white; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
-        th { background: #f4f4f4; }
-        .preview-salary { background: #fff3cd; padding: 10px; border-radius: 8px; text-align: center; font-weight: bold; margin-top: 10px; border: 1px dashed #856404; }
-        #pw-modal { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:1000; }
-        .modal-content { background:white; padding:20px; border-radius:12px; width:90%; max-width:320px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
-        
-        /* Style cho ô lương bị khóa */
-        .input-locked { background-color: #e9ecef; color: #6c757d; cursor: not-allowed; }
-    </style>
-</head>
-<body>
-
-<div class="container">
-    <!-- LOGIN/REGISTER -->
-    <div id="auth-section" class="card" style="max-width:350px; margin:50px auto;">
-        <h2 id="auth-title" style="text-align:center">Quản lý thời gian làm việc</h2>
-        <div id="reg-fields" class="hidden"><label>Họ Tên</label><input type="text" id="fullName"></div>
-        <label>Email</label><input type="email" id="email">
-        <label>Mật khẩu</label><input type="password" id="password">
-        <div id="confirm-reg-fields" class="hidden"><label>Xác nhận mật khẩu</label><input type="password" id="confirmPassword"></div>
-        <button class="btn-main" onclick="handleAuth()" id="btn-auth">Đăng Nhập</button>
-        <p onclick="toggleAuth()" id="toggle-text" style="text-align:center; color:blue; cursor:pointer; font-size:12px; margin-top:10px">Chưa có tài khoản? Đăng ký</p>
-    </div>
-
-    <!-- MAIN -->
-    <div id="main-content" class="hidden">
-        <div class="card" style="display:flex; justify-content:space-between; align-items:center">
-            <span>Chào: <b id="user-name"></b></span>
-            <div>
-                <button onclick="openPwModal()" class="bg-info btn-sm">Đổi mật khẩu</button>
-                <button onclick="logout()" class="bg-danger btn-sm">Thoát</button>
-            </div>
-        </div>
-
-        <div class="card">
-            <!-- LƯƠNG CƠ BẢN LÊN ĐẦU -->
-            <label>Lương cơ bản (Yên/giờ)</label>
-            <div style="display:flex; gap:5px; align-items:center">
-                <input type="number" id="baseRateInput" value="1231" readonly class="input-locked" oninput="calculatePreview()">
-                <button id="btn-rate-toggle" onclick="toggleRateLock()" class="bg-info" style="white-space:nowrap; width:100px">Thay đổi</button>
-            </div>
-
-            <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee;">
-            
-            <h3>Nhập Công</h3>
-            <input type="hidden" id="edit-id">
-            <label>Ngày làm việc</label>
-            <input type="date" id="workDate" onchange="syncFilterWithDate()">
-            
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px">
-                <div><label>Vào</label><input type="time" id="timeIn" value="08:00" oninput="calculatePreview()"></div>
-                <div><label>Ra</label><input type="time" id="timeOut" value="17:00" oninput="calculatePreview()"></div>
-                <div><label>Giải lao (phút)</label><input type="number" id="breakMin" value="45" oninput="calculatePreview()"></div>
-            </div>
-            <div id="salary-preview" class="preview-salary">Dự tính: 0 ¥</div>
-            <button class="btn-main" onclick="saveData()" id="btn-save">LƯU DỮ LIỆU</button>
-            <button id="btn-cancel" class="hidden" onclick="resetForm()" style="width:100%; margin-top:5px; background:#6c757d; color:white">Hủy</button>
-        </div>
-
-        <div class="card">
-            <div style="display:flex; justify-content:space-between; align-items:center">
-                <select id="filterMonthYear" style="width:180px" onchange="loadData()"></select>
-                <button onclick="exportExcel()" class="bg-success btn-sm">XUẤT EXCEL</button>
-            </div>
-            <div class="table-wrapper">
-                <table id="table-to-export">
-                    <thead><tr><th>Ngày</th><th>Tên</th><th>Giờ</th><th>Công</th><th>OT</th><th>Tiền</th><th>Lệnh</th></tr></thead>
-                    <tbody id="dataBody"></tbody>
-                    <tfoot id="dataFooter"></tfoot>
-                </table>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- MODAL ĐỔI MẬT KHẨU -->
-<div id="pw-modal" class="hidden">
-    <div class="modal-content">
-        <h3 style="margin-top:0; text-align:center">Đổi Mật Khẩu</h3>
-        <label>Mật khẩu cũ</label><input type="password" id="oldPass">
-        <label>Mật khẩu mới</label><input type="password" id="newPass">
-        <label>Xác nhận lại</label><input type="password" id="confirmPass">
-        <button class="btn-main" onclick="submitChangePassword()">CẬP NHẬT</button>
-        <button onclick="closePwModal()" style="width:100%; margin-top:8px; background:#f8f9fa; border:1px solid #ddd; color:#333">HỦY</button>
-    </div>
-</div>
-
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quản lý thời gian & tiền lương</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--primary:#155eef;--success:#16803c;--danger:#c62828;--warning:#f5b400;--info:#087e8b;--ink:#172033;--muted:#667085;--line:#e4e7ec;--bg:#f3f5f9}
+*{box-sizing:border-box}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);margin:0;padding:12px}.container{max-width:1250px;margin:auto}.card{background:#fff;padding:16px;border-radius:14px;box-shadow:0 2px 8px #1018280d;margin-bottom:14px}.topbar,.row,.toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.metric{border:1px solid var(--line);border-radius:12px;padding:14px}.metric .label{font-size:12px;color:var(--muted)}.metric .value{font-size:23px;font-weight:800;margin-top:5px;overflow-wrap:anywhere}h2,h3{margin:4px 0 12px}label{font-size:13px;font-weight:650;display:block;margin-top:8px}input,select{width:100%;padding:10px;margin:4px 0;border:1px solid #cfd4dc;border-radius:8px;font-size:14px;background:#fff;min-width:0}button{border:0;border-radius:8px;padding:10px 12px;font-weight:700;font-size:13px;cursor:pointer}button:disabled{opacity:.55;cursor:not-allowed}.primary{background:var(--primary);color:white}.success{background:var(--success);color:white}.danger{background:var(--danger);color:white}.warning{background:#ffdf80;color:#332500}.info{background:var(--info);color:white}.neutral{background:#eef1f5;color:#253047}.small{padding:6px 9px;font-size:12px}.hidden{display:none!important}.muted{color:var(--muted);font-size:12px}.notice{padding:10px 12px;background:#fff8e1;border:1px solid #f1d27a;border-radius:9px;font-size:13px;margin:10px 0}.table-wrap{overflow:auto;width:100%;margin-top:10px}table{width:100%;border-collapse:collapse;min-width:850px;background:white}th,td{border:1px solid var(--line);padding:9px;text-align:center;font-size:13px}th{background:#f7f8fa;position:sticky;top:0;z-index:1}tfoot{font-weight:800;background:#f8fafc}.preview{background:#fff8dc;border:1px dashed #c99b18;padding:12px;border-radius:10px;text-align:center;font-weight:750;margin-top:10px}.tabs{display:flex;gap:8px;flex-wrap:wrap}.tabs button.active{background:#182b52;color:#fff}.section-title{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.checkboxline{display:flex;align-items:center;gap:8px}.checkboxline input{width:auto}.auth{max-width:390px;margin:8vh auto}.badge{font-size:11px;border-radius:20px;padding:4px 8px;background:#e7f5ec;color:#17663a}.right{text-align:right}.danger-text{color:var(--danger)}
+@media(max-width:850px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.metric .value{font-size:20px}}@media(max-width:520px){body{padding:7px}.card{padding:12px}.grid{grid-template-columns:1fr 1fr}.grid2{grid-template-columns:1fr}.topbar{align-items:flex-start}.metric .value{font-size:18px}}
+@media print{body{background:white;padding:0}.no-print,#auth-section,.topbar .no-print,button{display:none!important}.card{box-shadow:none;border:1px solid #ddd;break-inside:avoid}.container{max-width:none}.table-wrap{overflow:visible}table{min-width:0}th,td{font-size:10px;padding:5px}}
+</style>
+</head><body><div class="container">
+<div id="auth-section" class="card auth"><h2 id="auth-title" style="text-align:center">Quản lý thời gian & tiền lương</h2><div id="reg-fields" class="hidden"><label>Họ tên</label><input id="fullName" autocomplete="name"></div><label>Email</label><input id="email" type="email" autocomplete="username"><label>Mật khẩu</label><input id="password" type="password" autocomplete="current-password"><div id="confirm-reg-fields" class="hidden"><label>Xác nhận mật khẩu</label><input id="confirmPassword" type="password"></div><button class="primary" style="width:100%;margin-top:12px" id="btn-auth" onclick="handleAuth()">Đăng nhập</button><p id="toggle-text" style="text-align:center;color:#155eef;cursor:pointer" onclick="toggleAuth()">Chưa có tài khoản? Đăng ký</p></div>
+<div id="main-content" class="hidden">
+<header class="card topbar"><div><div class="muted">Tài khoản đang đăng nhập</div><strong id="user-name"></strong> <span id="role-badge" class="badge"></span></div><div class="toolbar no-print"><button class="info" onclick="openPwModal()">Đổi mật khẩu</button><button class="danger" onclick="logout()">Đăng xuất</button></div></header>
+<div id="admin-warning" class="notice hidden">Quản trị viên: khi sửa bản ghi cũ, ứng dụng sẽ giữ nguyên chủ sở hữu và tên nhân viên. Mức lương mới chỉ áp dụng cho công việc từ ngày hiệu lực trở đi.</div>
+<div id="admin-dashboard" class="card hidden"><div class="section-title"><h2>Dashboard toàn công ty</h2><span class="muted">Tổng hợp theo tháng đang chọn</span></div><div class="grid"><div class="metric"><div class="label">Tổng tiền lương</div><div class="value" id="metric-pay">0 ¥</div></div><div class="metric"><div class="label">Tổng ngày công nhân viên</div><div class="value" id="metric-days">0</div></div><div class="metric"><div class="label">Tổng giờ thường</div><div class="value" id="metric-hours">0 giờ</div></div><div class="metric"><div class="label">Tổng giờ tăng ca</div><div class="value" id="metric-ot">0 giờ</div></div></div><div class="table-wrap"><table style="min-width:650px"><thead><tr><th>Nhân viên</th><th>Số ngày</th><th>Giờ thường</th><th>Giờ OT</th><th>Tổng tiền</th></tr></thead><tbody id="employee-summary-body"></tbody></table></div></div>
+<div class="card"><div class="section-title"><h2>Nhập / sửa công</h2><span class="muted">Lương tăng ca: 1,25× sau 8 giờ làm thực tế</span></div><input type="hidden" id="edit-id"><div id="target-employee-wrap" class="hidden"><label>Nhân viên</label><select id="target-employee" onchange="onTargetEmployeeChange()"></select><div class="muted">Chọn nhân viên khi quản trị viên nhập công mới. Khi sửa bản ghi cũ, chủ sở hữu sẽ được giữ nguyên.</div></div><label>Ngày làm việc</label><input type="date" id="workDate" onchange="syncFilterWithDate()"><div class="grid2"><div><label>Giờ vào</label><input type="time" id="timeIn" value="08:00" oninput="calculatePreview()"></div><div><label>Giờ ra</label><input type="time" id="timeOut" value="17:00" oninput="calculatePreview()"></div><div><label>Giải lao (phút)</label><input type="number" id="breakMin" value="45" min="0" max="720" oninput="calculatePreview()"></div><div><label>Mức lương áp dụng (¥/giờ)</label><input type="number" id="baseRateInput" value="1231" min="1" readonly></div></div><div id="salary-preview" class="preview">Dự tính: 0 ¥</div><div class="toolbar no-print" style="margin-top:8px"><button class="primary" id="btn-save" onclick="saveData()">LƯU DỮ LIỆU</button><button id="btn-cancel" class="neutral hidden" onclick="resetForm()">Hủy sửa</button></div><p class="muted">Bản ghi cũ giữ nguyên mức lương đã lưu. Không tự tính lại lương cũ khi mức lương mới thay đổi.</p></div>
+<div id="wage-admin" class="card hidden"><h2>Quản lý mức lương theo ngày hiệu lực</h2><div class="notice">Thay đổi mức lương sẽ áp dụng cho các bản ghi mới có ngày làm việc từ ngày hiệu lực trở đi. Các bản ghi đã lưu không bị tự động thay đổi.</div><div class="grid2"><div><label>Nhân viên</label><select id="wage-employee"></select></div><div><label>Mức lương mới (¥/giờ)</label><input id="wage-rate" type="number" min="1" value="1231"></div><div><label>Ngày bắt đầu áp dụng</label><input id="wage-effective-date" type="date"></div><div style="display:flex;align-items:end"><button class="success" style="width:100%" onclick="saveWageRate()">Lưu mức lương</button></div></div><div class="table-wrap"><table style="min-width:650px"><thead><tr><th>Nhân viên</th><th>Ngày hiệu lực</th><th>Lương/giờ</th><th>Người cập nhật</th></tr></thead><tbody id="wage-history-body"></tbody></table></div></div>
+<div class="card"><div class="section-title"><h2>Bảng công / lương</h2><div class="toolbar no-print"><button class="success" onclick="exportExcel()">Xuất Excel</button><button class="info" onclick="backupJSON()">Sao lưu JSON</button><button class="neutral" onclick="window.print()">In báo cáo</button></div></div><div class="grid2 no-print"><div><label>Tháng báo cáo</label><select id="filterMonthYear" onchange="loadData()"></select></div><div id="employee-filter-wrap" class="hidden"><label>Lọc nhân viên</label><select id="employee-filter" onchange="renderData()"><option value="ALL">Tất cả nhân viên</option></select></div></div><div class="table-wrap"><table id="table-to-export"><thead><tr><th>Ngày</th><th>Tên nhân viên</th><th>Giờ vào–ra</th><th>Giờ thường</th><th>OT</th><th>Lương/giờ</th><th>Thành tiền (¥)</th><th class="no-print">Thao tác</th></tr></thead><tbody id="dataBody"></tbody><tfoot id="dataFooter"></tfoot></table></div><p id="data-status" class="muted"></p></div>
+<div id="audit-card" class="card hidden"><div class="section-title"><h2>Nhật ký chỉnh sửa</h2><button class="neutral no-print" onclick="loadAuditLogs()">Làm mới nhật ký</button></div><div class="table-wrap"><table style="min-width:760px"><thead><tr><th>Thời điểm</th><th>Người thao tác</th><th>Hành động</th><th>Nhân viên liên quan</th><th>Chi tiết</th></tr></thead><tbody id="audit-body"></tbody></table></div><p class="muted">Nhật ký được ghi bởi ứng dụng; để ngăn sửa/xóa nhật ký ở cấp bảo mật, cần cập nhật Firestore Rules như hướng dẫn bên dưới.</p></div>
+</div></div>
+<div id="pw-modal" class="hidden" style="position:fixed;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;z-index:1000"><div class="card" style="width:min(92vw,380px)"><h3>Đổi mật khẩu</h3><label>Mật khẩu cũ</label><input id="oldPass" type="password"><label>Mật khẩu mới</label><input id="newPass" type="password"><label>Xác nhận mật khẩu mới</label><input id="confirmPass" type="password"><button class="primary" style="width:100%;margin-top:10px" onclick="submitChangePassword()">Cập nhật</button><button class="neutral" style="width:100%;margin-top:8px" onclick="closePwModal()">Hủy</button></div></div>
 <script>
     const firebaseConfig = {
         apiKey: "AIzaSyDzp1rjYmoxb8iFfMd0mcwgqeVimP4LXkw",
@@ -120,289 +34,44 @@
         messagingSenderId: "293176773446",
         appId: "1:293176773446:web:f736157bfdbce598fab347"
     };
-
     firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
-    const auth = firebase.auth();
-    let isLoginMode = true;
+    const db = firebase.firestore(), auth = firebase.auth();
     const DEFAULT_BASE_RATE = 1231;
-    let currentBaseRate = DEFAULT_BASE_RATE;
-
-    // Đọc mức lương riêng của tài khoản; tài khoản chưa có cấu hình sẽ dùng mặc định 1231.
-    async function loadBaseRate() {
-        const user = auth.currentUser;
-        if (!user) return;
-        const ref = db.collection("cau_hinh_luong").doc(user.uid);
-        const snap = await ref.get();
-        if (snap.exists && Number(snap.data().muc_luong) > 0) {
-            currentBaseRate = Number(snap.data().muc_luong);
-        } else {
-            currentBaseRate = DEFAULT_BASE_RATE;
-            await ref.set({
-                uid: user.uid,
-                email: user.email || "",
-                muc_luong: DEFAULT_BASE_RATE,
-                cap_nhat_luc: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-        }
-        const input = document.getElementById("baseRateInput");
-        input.value = currentBaseRate;
-        input.readOnly = true;
-        input.classList.add("input-locked");
-        const btn = document.getElementById("btn-rate-toggle");
-        btn.innerText = "Thay đổi";
-        btn.classList.remove("bg-success");
-        btn.classList.add("bg-info");
-        calculatePreview();
-    }
-
-    // Mở ô lương để sửa; khi xác nhận, lưu mức lương riêng của tài khoản vào Firestore.
-    async function toggleRateLock() {
-        const input = document.getElementById('baseRateInput');
-        const btn = document.getElementById('btn-rate-toggle');
-        if (input.readOnly) {
-            input.readOnly = false;
-            input.classList.remove('input-locked');
-            btn.innerText = "Xác nhận";
-            btn.classList.remove('bg-info');
-            btn.classList.add('bg-success');
-            input.focus();
-            input.select();
-            return;
-        }
-        const newRate = Number(input.value);
-        if (!Number.isFinite(newRate) || newRate <= 0) {
-            alert("Vui lòng nhập mức lương lớn hơn 0!");
-            input.focus();
-            return;
-        }
-        const user = auth.currentUser;
-        if (!user) return alert("Vui lòng đăng nhập lại!");
-        btn.disabled = true;
-        try {
-            await db.collection("cau_hinh_luong").doc(user.uid).set({
-                uid: user.uid,
-                email: user.email || "",
-                muc_luong: Math.round(newRate),
-                cap_nhat_luc: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-            currentBaseRate = Math.round(newRate);
-            input.value = currentBaseRate;
-            input.readOnly = true;
-            input.classList.add('input-locked');
-            btn.innerText = "Thay đổi";
-            btn.classList.remove('bg-success');
-            btn.classList.add('bg-info');
-            calculatePreview();
-            alert(`Đã lưu lương cơ bản ${currentBaseRate.toLocaleString()} ¥/giờ cho tài khoản của bạn. Mức này sẽ được giữ lại khi đăng nhập lần sau.`);
-        } catch (err) {
-            alert("Không lưu được mức lương. Hãy kiểm tra quyền Firestore hoặc kết nối mạng.\n" + err.message);
-        } finally {
-            btn.disabled = false;
-        }
-    }
-
-    function toggleAuth() {
-        isLoginMode = !isLoginMode;
-        document.getElementById('auth-title').innerText = isLoginMode ? "Đăng Nhập" : "Đăng Ký";
-        document.getElementById('reg-fields').classList.toggle('hidden', isLoginMode);
-        document.getElementById('confirm-reg-fields').classList.toggle('hidden', isLoginMode);
-        document.getElementById('btn-auth').innerText = isLoginMode ? "Đăng Nhập" : "Đăng Ký";
-        document.getElementById('toggle-text').innerText = isLoginMode ? "Chưa có tài khoản? Đăng ký" : "Đã có tài khoản? Đăng nhập";
-    }
-
-    async function handleAuth() {
-        const e = document.getElementById('email').value, p = document.getElementById('password').value;
-        try {
-            if(isLoginMode) await auth.signInWithEmailAndPassword(e, p);
-            else {
-                const n = document.getElementById('fullName').value, cp = document.getElementById('confirmPassword').value;
-                if(!n) return alert("Vui lòng nhập họ tên!");
-                if(p !== cp) return alert("Mật khẩu xác nhận không khớp!");
-                const res = await auth.createUserWithEmailAndPassword(e, p);
-                await res.user.updateProfile({ displayName: n });
-            }
-            location.reload();
-        } catch(err) { alert(err.message); }
-    }
-
-    function logout() { auth.signOut(); location.reload(); }
-    function openPwModal() { document.getElementById('pw-modal').classList.remove('hidden'); }
-    function closePwModal() { document.getElementById('pw-modal').classList.add('hidden'); }
-
-    async function submitChangePassword() {
-        const user = auth.currentUser;
-        const oldP = document.getElementById('oldPass').value, newP = document.getElementById('newPass').value, confP = document.getElementById('confirmPass').value;
-        if(!oldP || !newP || !confP) return alert("Vui lòng điền đủ thông tin!");
-        if(newP !== confP) return alert("Xác nhận không khớp!");
-        try {
-            const credential = firebase.auth.EmailAuthProvider.credential(user.email, oldP);
-            await user.reauthenticateWithCredential(credential);
-            await user.updatePassword(newP);
-            alert("Đổi mật khẩu thành công!");
-            closePwModal();
-        } catch (err) { alert("Lỗi: " + err.message); }
-    }
-
-    function syncFilterWithDate() {
-        const date = document.getElementById('workDate').value;
-        if(date) {
-            document.getElementById('filterMonthYear').value = date.substring(0, 7);
-            loadData();
-            calculatePreview();
-        }
-    }
-
-    function getCalc() {
-        const d = document.getElementById('workDate').value || "2026-05-14";
-        const rate = parseInt(document.getElementById('baseRateInput').value) || currentBaseRate || DEFAULT_BASE_RATE;
-        const rateOT = Math.round(rate * 1.25);
-        const t1 = new Date(`${d}T${document.getElementById('timeIn').value}`);
-        let t2 = new Date(`${d}T${document.getElementById('timeOut').value}`);
-        if(t2 <= t1) t2.setDate(t2.getDate() + 1);
-        let total = (t2 - t1)/3600000 - (document.getElementById('breakMin').value/60);
-        total = Math.max(0, total);
-        let b = Math.min(8, total), ot = Math.max(0, total - 8);
-        return { b: b.toFixed(2), ot: ot.toFixed(2), m: Math.round(b*rate + ot*rateOT), currentRate: rate };
-    }
-
-    function calculatePreview() {
-        const res = getCalc();
-        document.getElementById('salary-preview').innerText = `${res.b}h + ${res.ot}h OT (Hệ số: ${res.currentRate}) = ${res.m.toLocaleString()} ¥`;
-    }
-
-    auth.onAuthStateChanged(async user => {
-        if(user) {
-            document.getElementById('auth-section').classList.add('hidden');
-            document.getElementById('main-content').classList.remove('hidden');
-            document.getElementById('user-name').innerText = user.displayName || user.email;
-            try {
-                await loadBaseRate();
-            } catch (err) {
-                console.error("Không tải được mức lương:", err);
-                currentBaseRate = DEFAULT_BASE_RATE;
-                document.getElementById('baseRateInput').value = DEFAULT_BASE_RATE;
-                alert("Không tải được mức lương đã lưu. Tạm dùng mức mặc định 1.231 ¥/giờ. Hãy kiểm tra quyền Firestore nếu lỗi tiếp tục.");
-            }
-            initFilter();
-            document.getElementById('workDate').value = new Date().toLocaleDateString('en-CA');
-            syncFilterWithDate();
-        }
-    });
-
-    async function saveData() {
-        const u = auth.currentUser;
-        const d = document.getElementById('workDate').value;
-        const id = document.getElementById('edit-id').value;
-        if (!u) return alert("Vui lòng đăng nhập lại!");
-        if (!d) return alert("Chọn ngày!");
-
-        const res = getCalc();
-        // Khi cập nhật bản ghi cũ (đặc biệt khi quản trị sửa cho nhân viên),
-        // giữ nguyên UID và tên của chủ bản ghi; không đổi thành thông tin quản trị.
-        let recordUid = u.uid;
-        let recordName = u.displayName || u.email || "";
-        try {
-            if (id) {
-                const oldSnap = await db.collection("bang_luong").doc(id).get();
-                if (!oldSnap.exists) return alert("Không tìm thấy bản ghi cần sửa. Hãy tải lại danh sách.");
-                const oldData = oldSnap.data() || {};
-                recordUid = oldData.uid || u.uid;
-                recordName = oldData.ho_ten || recordName;
-            }
-
-            const data = {
-                uid: recordUid,
-                ho_ten: recordName,
-                ngay: d,
-                gio_vao: document.getElementById('timeIn').value,
-                gio_ra: document.getElementById('timeOut').value,
-                giai_lao: document.getElementById('breakMin').value,
-                he_so_luong: res.currentRate,
-                gio_lam: res.b,
-                tang_ca: res.ot,
-                thanh_tien: res.m,
-                thang_nam: d.substring(0, 7)
-            };
-
-            if (id) await db.collection("bang_luong").doc(id).update(data);
-            else await db.collection("bang_luong").add(data);
-            alert("Đã lưu dữ liệu!");
-            resetForm();
-        } catch (e) {
-            console.error("Lỗi lưu dữ liệu:", e);
-            alert("Không lưu được dữ liệu: " + (e.message || e));
-        }
-    }
-
-    async function deleteData(id) {
-        if(confirm("Xóa bản ghi này?")) {
-            try { await db.collection("bang_luong").doc(id).delete(); } catch(e) { alert(e.message); }
-        }
-    }
-
-    function loadData() {
-        const val = document.getElementById('filterMonthYear').value, u = auth.currentUser;
-        if(!val || !u) return;
-        let q = db.collection("bang_luong").where("thang_nam", "==", val);
-        if(u.email !== "phamvantan@gmail.com") q = q.where("uid", "==", u.uid);
-        q.onSnapshot(snap => {
-            let html = '', sH = 0, sO = 0, sM = 0, docs = [];
-            snap.forEach(d => docs.push({id: d.id, ...d.data()}));
-            docs.sort((a,b) => a.ngay.localeCompare(b.ngay));
-            const workDays = new Set(docs.filter(d => d.ngay).map(d => `${d.uid || d.ho_ten}_${d.ngay}`)).size;
-            docs.forEach(d => {
-                sH += Number(d.gio_lam) || 0;
-                sO += Number(d.tang_ca) || 0;
-                sM += Number(d.thanh_tien) || 0;
-                html += `<tr><td>${d.ngay}</td><td>${d.ho_ten}</td><td>${d.gio_vao}-${d.gio_ra}</td><td>${d.gio_lam}</td><td>${d.tang_ca}</td><td>${Number(d.thanh_tien || 0).toLocaleString()}</td>
-                <td><button class="bg-warning" style="margin-bottom:2px" onclick="editData('${d.id}','${d.ngay}','${d.gio_vao}','${d.gio_ra}',${d.giai_lao},${d.he_so_luong || DEFAULT_BASE_RATE})">Sửa</button>
-                <button class="bg-danger" onclick="deleteData('${d.id}')">Xóa</button></td></tr>`;
-            });
-            document.getElementById('dataBody').innerHTML = html || '<tr><td colspan="7">Trống</td></tr>';
-            document.getElementById('dataFooter').innerHTML = `<tr><td colspan="3" style="font-weight:bold">TỔNG: ${workDays} NGÀY</td><td>${sH.toFixed(2)}h</td><td>${sO.toFixed(2)}h</td><td colspan="2" style="color:red; font-weight:bold">${sM.toLocaleString()} ¥</td></tr>`;
-        });
-    }
-
-    function editData(id, d, t1, t2, b, rate) {
-        document.getElementById('edit-id').value = id; 
-        document.getElementById('workDate').value = d;
-        document.getElementById('timeIn').value = t1; 
-        document.getElementById('timeOut').value = t2;
-        document.getElementById('breakMin').value = b; 
-        document.getElementById('baseRateInput').value = rate; 
-        document.getElementById('btn-save').innerText = "CẬP NHẬT";
-        document.getElementById('btn-cancel').classList.remove('hidden'); 
-        window.scrollTo(0,0);
-        calculatePreview();
-    }
-
-    function resetForm() {
-        document.getElementById('edit-id').value = "";
-        document.getElementById('btn-save').innerText = "LƯU DỮ LIỆU";
-        document.getElementById('btn-cancel').classList.add('hidden');
-        document.getElementById('baseRateInput').value = currentBaseRate;
-        document.getElementById('baseRateInput').readOnly = true;
-        document.getElementById('baseRateInput').classList.add('input-locked');
-        const rateBtn = document.getElementById('btn-rate-toggle');
-        rateBtn.innerText = "Thay đổi";
-        rateBtn.classList.remove('bg-success');
-        rateBtn.classList.add('bg-info');
-        calculatePreview();
-    }
-
-    function initFilter() {
-        const s = document.getElementById('filterMonthYear');
-        if(s.options.length > 0) return;
-        for(let y = 2025; y <= 2026; y++) {
-            for(let m = 1; m <= 12; m++) {
-                let mm = m.toString().padStart(2, '0');
-                let v = `${y}-${mm}`;
-                s.add(new Option(`Tháng ${mm}/${y}`, v, v === "2026-05"));
-            }
-        }
-    }
-    function exportExcel() { XLSX.writeFile(XLSX.utils.table_to_book(document.getElementById("table-to-export")), `Luong.xlsx`); }
-</script>
-</body>
-</html>
+    const ADMIN_EMAILS = ["admin@1177.com", "phamvantan@gmail.com"];
+    let isLoginMode = true, isAdmin = false, currentBaseRate = DEFAULT_BASE_RATE;
+    let currentRecords = [], allEmployees = new Map(), wageHistoryCache = [], auditUnsub = null, recordsUnsub = null;
+    const $ = id => document.getElementById(id);
+    const money = n => (Number(n)||0).toLocaleString('vi-VN') + ' ¥';
+    const isAdminUser = user => !!user && ADMIN_EMAILS.includes(String(user.email||'').toLowerCase());
+    const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    function localDate(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+    function monthOf(date){return String(date||'').slice(0,7);}
+    function toggleAuth(){isLoginMode=!isLoginMode;$('auth-title').innerText=isLoginMode?'Quản lý thời gian & tiền lương':'Tạo tài khoản';$('reg-fields').classList.toggle('hidden',isLoginMode);$('confirm-reg-fields').classList.toggle('hidden',isLoginMode);$('btn-auth').innerText=isLoginMode?'Đăng nhập':'Đăng ký';$('toggle-text').innerText=isLoginMode?'Chưa có tài khoản? Đăng ký':'Đã có tài khoản? Đăng nhập';}
+    async function handleAuth(){const e=$('email').value.trim(),p=$('password').value;try{if(isLoginMode){await auth.signInWithEmailAndPassword(e,p);}else{const n=$('fullName').value.trim(),cp=$('confirmPassword').value;if(!n)return alert('Vui lòng nhập họ tên.');if(p!==cp)return alert('Mật khẩu xác nhận không khớp.');const res=await auth.createUserWithEmailAndPassword(e,p);await res.user.updateProfile({displayName:n});}location.reload();}catch(err){alert('Không đăng nhập/đăng ký được: '+err.message);}}
+    function logout(){auth.signOut().then(()=>location.reload());}function openPwModal(){$('pw-modal').classList.remove('hidden');}function closePwModal(){$('pw-modal').classList.add('hidden');}
+    async function submitChangePassword(){const user=auth.currentUser,oldP=$('oldPass').value,newP=$('newPass').value,conf=$('confirmPass').value;if(!oldP||!newP||!conf)return alert('Vui lòng điền đủ thông tin.');if(newP!==conf)return alert('Mật khẩu xác nhận không khớp.');try{await user.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(user.email,oldP));await user.updatePassword(newP);alert('Đổi mật khẩu thành công.');closePwModal();}catch(e){alert('Không đổi được mật khẩu: '+e.message);}}
+    function initFilter(){const s=$('filterMonthYear');s.innerHTML='';const now=new Date();for(let y=now.getFullYear()-3;y<=now.getFullYear()+2;y++)for(let m=1;m<=12;m++){const v=`${y}-${String(m).padStart(2,'0')}`;s.add(new Option(`Tháng ${String(m).padStart(2,'0')}/${y}`,v));}s.value=monthOf(localDate());}
+    async function loadBaseRate(){const user=auth.currentUser;if(!user)return;try{const snap=await db.collection('cau_hinh_luong').doc(user.uid).get();currentBaseRate=snap.exists&&Number(snap.data().muc_luong)>0?Number(snap.data().muc_luong):DEFAULT_BASE_RATE;}catch(e){console.warn('Không đọc được cấu hình lương cá nhân, dùng mức mặc định.',e);currentBaseRate=DEFAULT_BASE_RATE;} $('baseRateInput').value=currentBaseRate;}
+    function getCalc(rateOverride){const d=$('workDate').value||localDate(),rate=Number(rateOverride||$('baseRateInput').value||currentBaseRate||DEFAULT_BASE_RATE),tIn=$('timeIn').value||'08:00',tOut=$('timeOut').value||'17:00';const t1=new Date(`${d}T${tIn}`);let t2=new Date(`${d}T${tOut}`);if(t2<=t1)t2.setDate(t2.getDate()+1);const breakMin=Math.max(0,Number($('breakMin').value)||0);const total=Math.max(0,(t2-t1)/3600000-breakMin/60);const regular=Math.min(8,total),ot=Math.max(0,total-8),otRate=Math.round(rate*1.25);return {regular:Number(regular.toFixed(2)),ot:Number(ot.toFixed(2)),amount:Math.round(regular*rate+ot*otRate),rate};}
+    function calculatePreview(){const r=getCalc();$('salary-preview').innerText=`${r.regular.toFixed(2)} giờ thường + ${r.ot.toFixed(2)} giờ OT × 1,25 = ${money(r.amount)} (lương ${r.rate.toLocaleString('vi-VN')} ¥/giờ)`;}
+    async function getRateFor(uid,date){const allRows=wageHistoryCache.filter(x=>x.uid===uid).sort((a,b)=>String(b.ngay_hieu_luc).localeCompare(String(a.ngay_hieu_luc)));const rows=allRows.filter(x=>String(x.ngay_hieu_luc||'')<=date);if(rows.length&&Number(rows[0].muc_luong)>0)return Number(rows[0].muc_luong);try{const snap=await db.collection('cau_hinh_luong').doc(uid).get();if(snap.exists&&Number(snap.data().muc_luong)>0){const cfg=snap.data(),effective=String(cfg.ngay_hieu_luc_cuoi||'');if(!effective||date>=effective)return Number(cfg.muc_luong);}}catch(e){console.warn(e);}return DEFAULT_BASE_RATE;}
+    async function onTargetEmployeeChange(){const uid=$('target-employee').value,emp=allEmployees.get(uid);if(!uid||!emp)return;const rate=await getRateFor(uid,$('workDate').value||localDate());$('baseRateInput').value=rate;calculatePreview();}
+    async function refreshEmployees(){const user=auth.currentUser;if(!user)return;let snap;if(isAdmin)snap=await db.collection('bang_luong').get();else snap=await db.collection('bang_luong').where('uid','==',user.uid).get();allEmployees=new Map();allEmployees.set(user.uid,{uid:user.uid,name:user.displayName||user.email,email:user.email||''});snap.forEach(doc=>{const d=doc.data();if(d.uid)allEmployees.set(d.uid,{uid:d.uid,name:d.ho_ten||d.email||d.uid,email:d.email||''});});const fill=(id,includeAll)=>{const el=$(id);if(!el)return;const old=el.value;el.innerHTML='';if(includeAll)el.add(new Option('Tất cả nhân viên','ALL'));[...allEmployees.values()].sort((a,b)=>a.name.localeCompare(b.name,'vi')).forEach(e=>el.add(new Option(`${e.name} (${e.email||e.uid.slice(0,7)})`,e.uid)));if([...el.options].some(o=>o.value===old))el.value=old;};fill('target-employee',false);fill('wage-employee',false);fill('employee-filter',true);if(!isAdmin){$('target-employee').value=user.uid;$('wage-employee').value=user.uid;}}
+    async function loadWageHistory(){try{let q=db.collection('lich_su_luong');if(!isAdmin)q=q.where('uid','==',auth.currentUser.uid);const snap=await q.get();wageHistoryCache=snap.docs.map(d=>({id:d.id,...d.data()}));wageHistoryCache.sort((a,b)=>String(b.ngay_hieu_luc||'').localeCompare(String(a.ngay_hieu_luc||'')));renderWageHistory();}catch(e){console.error(e);$('wage-history-body').innerHTML='<tr><td colspan="4">Không đọc được lịch sử lương. Kiểm tra Firestore Rules.</td></tr>';}}
+    function renderWageHistory(){const rows=wageHistoryCache.slice().sort((a,b)=>String(b.ngay_hieu_luc||'').localeCompare(String(a.ngay_hieu_luc||'')));$('wage-history-body').innerHTML=rows.map(r=>`<tr><td>${esc(r.ho_ten||allEmployees.get(r.uid)?.name||r.uid||'')}</td><td>${esc(r.ngay_hieu_luc||'')}</td><td>${money(r.muc_luong)}</td><td>${esc(r.nguoi_thuc_hien_email||r.nguoi_thuc_hien_uid||'')}</td></tr>`).join('')||'<tr><td colspan="4">Chưa có lịch sử mức lương.</td></tr>';}
+    async function writeAudit(action,targetUid,targetName,detail){const user=auth.currentUser;const payload={uid:targetUid||user.uid,ho_ten:targetName||'',nguoi_thuc_hien_uid:user.uid,nguoi_thuc_hien_email:user.email||'',hanh_dong:action,chi_tiet:detail||'',thoi_diem:firebase.firestore.FieldValue.serverTimestamp(),thoi_diem_client:new Date().toISOString()};try{await db.collection('nhat_ky_chinh_sua').add(payload);}catch(e){console.error('Không ghi được nhật ký. Cần kiểm tra Firestore Rules:',e);alert('Thao tác đã thực hiện nhưng không ghi được nhật ký chỉnh sửa. Hãy kiểm tra Firestore Rules.');}}
+    async function saveWageRate(){const uid=$('wage-employee').value,emp=allEmployees.get(uid),rate=Math.round(Number($('wage-rate').value)),date=$('wage-effective-date').value||localDate();if(!uid||!emp)return alert('Chọn nhân viên.');if(!Number.isFinite(rate)||rate<=0)return alert('Nhập mức lương hợp lệ.');if(!isAdmin&&uid!==auth.currentUser.uid)return alert('Bạn chỉ được thay đổi mức lương của mình.');const id=`${uid}_${date}`;const prior=wageHistoryCache.find(x=>x.uid===uid&&x.ngay_hieu_luc===date);try{await db.collection('lich_su_luong').doc(id).set({uid,ho_ten:emp.name,email:emp.email||'',muc_luong:rate,ngay_hieu_luc:date,nguoi_thuc_hien_uid:auth.currentUser.uid,nguoi_thuc_hien_email:auth.currentUser.email||'',cap_nhat_luc:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});await db.collection('cau_hinh_luong').doc(uid).set({uid,email:emp.email||'',muc_luong:rate,ngay_hieu_luc_cuoi:date,cap_nhat_luc:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});await writeAudit('THAY_DOI_MUC_LUONG',uid,emp.name,`${prior?'Cập nhật':'Thêm'} mức lương ${rate} ¥/giờ, hiệu lực từ ${date}.`);await loadWageHistory();if(uid===auth.currentUser.uid){currentBaseRate=await getRateFor(uid,localDate());$('baseRateInput').value=currentBaseRate;calculatePreview();}alert(`Đã lưu mức ${rate.toLocaleString('vi-VN')} ¥/giờ, hiệu lực từ ${date}. Bản ghi lương cũ không tự thay đổi.`);}catch(e){alert('Không lưu được lịch sử lương: '+e.message);}}
+    function syncFilterWithDate(){const date=$('workDate').value;if(date){$('filterMonthYear').value=monthOf(date);loadData();}if(isAdmin&&$('target-employee').value)onTargetEmployeeChange();else if(!isAdmin)getRateFor(auth.currentUser.uid,date).then(r=>{$('baseRateInput').value=r;calculatePreview();});else calculatePreview();}
+    async function saveData(){const user=auth.currentUser,date=$('workDate').value,id=$('edit-id').value;if(!user)return alert('Vui lòng đăng nhập lại.');if(!date)return alert('Chọn ngày làm việc.');let targetUid=user.uid,targetName=user.displayName||user.email,targetEmail=user.email||'',oldData=null;if(id){try{const oldSnap=await db.collection('bang_luong').doc(id).get();if(!oldSnap.exists)return alert('Bản ghi không còn tồn tại. Hãy tải lại trang.');oldData=oldSnap.data();if(!oldData.uid)return alert('Bản ghi cũ này không có UID nên chưa thể xác định an toàn chủ sở hữu. Không lưu để tránh gán nhầm sang quản trị viên. Hãy sao lưu và xác minh dữ liệu trước.');if(!isAdmin&&oldData.uid!==user.uid)return alert('Bạn không có quyền sửa bản ghi này.');targetUid=oldData.uid;targetName=oldData.ho_ten||allEmployees.get(targetUid)?.name||'';if(!targetName)return alert('Không xác định được tên nhân viên của bản ghi. Hãy kiểm tra dữ liệu trước khi sửa.');targetEmail=oldData.email||allEmployees.get(targetUid)?.email||'';}catch(e){return alert('Không kiểm tra được quyền sửa: '+e.message);}}else if(isAdmin){targetUid=$('target-employee').value;const emp=allEmployees.get(targetUid);if(!targetUid||!emp)return alert('Hãy chọn nhân viên.');targetName=emp.name;targetEmail=emp.email||'';}
+      let rate;if(oldData){rate=Number(oldData.he_so_luong)||await getRateFor(targetUid,date);}else{rate=await getRateFor(targetUid,date);}const calc=getCalc(rate);const data={uid:targetUid,ho_ten:targetName,email:targetEmail,ngay:date,gio_vao:$('timeIn').value,gio_ra:$('timeOut').value,giai_lao:String($('breakMin').value||0),he_so_luong:calc.rate,gio_lam:calc.regular.toFixed(2),tang_ca:calc.ot.toFixed(2),thanh_tien:calc.amount,thang_nam:monthOf(date),cap_nhat_luc:firebase.firestore.FieldValue.serverTimestamp()};try{if(id){await db.collection('bang_luong').doc(id).update(data);await writeAudit('SUA_BANG_LUONG',targetUid,targetName,`Ngày ${date}; giờ ${data.gio_vao}-${data.gio_ra}; lương/giờ ${calc.rate}; thành tiền ${calc.amount} ¥.`);}else{data.tao_boi_uid=user.uid;data.tao_boi_email=user.email||'';data.tao_luc= firebase.firestore.FieldValue.serverTimestamp();const ref=await db.collection('bang_luong').add(data);await writeAudit('THEM_BANG_LUONG',targetUid,targetName,`Mã bản ghi ${ref.id}; ngày ${date}; tiền ${calc.amount} ¥.`);}alert('Đã lưu dữ liệu.');resetForm();loadData();}catch(e){alert('Không lưu được dữ liệu: '+e.message);}}
+    async function editData(id){try{const snap=await db.collection('bang_luong').doc(id).get();if(!snap.exists)return alert('Bản ghi không tồn tại.');const d=snap.data(),user=auth.currentUser;if(!isAdmin&&d.uid!==user.uid)return alert('Bạn không có quyền sửa bản ghi này.');$('edit-id').value=id;$('workDate').value=d.ngay||localDate();$('timeIn').value=d.gio_vao||'08:00';$('timeOut').value=d.gio_ra||'17:00';$('breakMin').value=d.giai_lao??45;$('baseRateInput').value=Number(d.he_so_luong)||DEFAULT_BASE_RATE;if(isAdmin&&d.uid&&[...$('target-employee').options].some(o=>o.value===d.uid))$('target-employee').value=d.uid;$('btn-save').innerText='CẬP NHẬT BẢN GHI';$('btn-cancel').classList.remove('hidden');$('target-employee').disabled=true;calculatePreview();window.scrollTo({top:0,behavior:'smooth'});}catch(e){alert('Không mở được bản ghi: '+e.message);}}
+    async function deleteData(id){if(!isAdmin&&!confirm('Bạn chắc chắn muốn xóa bản ghi công của mình?'))return;if(isAdmin&&!confirm('Xóa bản ghi này? Thao tác không thể tự hoàn tác.'))return;try{const ref=db.collection('bang_luong').doc(id),snap=await ref.get();if(!snap.exists)return;const d=snap.data();if(!isAdmin&&d.uid!==auth.currentUser.uid)return alert('Bạn không có quyền xóa bản ghi này.');await ref.delete();await writeAudit('XOA_BANG_LUONG',d.uid,d.ho_ten,`Đã xóa bản ghi ngày ${d.ngay}; trước khi xóa: ${d.gio_vao}-${d.gio_ra}, ${d.thanh_tien} ¥.`);loadData();}catch(e){alert('Không xóa được: '+e.message);}}
+    function resetForm(){$('edit-id').value='';$('btn-save').innerText='LƯU DỮ LIỆU';$('btn-cancel').classList.add('hidden');$('target-employee').disabled=false;$('workDate').value=localDate();$('timeIn').value='08:00';$('timeOut').value='17:00';$('breakMin').value=45;if(isAdmin){if(allEmployees.has(auth.currentUser.uid))$('target-employee').value=auth.currentUser.uid;onTargetEmployeeChange();}else{getRateFor(auth.currentUser.uid,localDate()).then(r=>{$('baseRateInput').value=r;calculatePreview();});}calculatePreview();}
+    function loadData(){if(recordsUnsub){recordsUnsub();recordsUnsub=null;}const month=$('filterMonthYear').value,user=auth.currentUser;if(!month||!user)return;let q=db.collection('bang_luong').where('thang_nam','==',month);if(!isAdmin)q=q.where('uid','==',user.uid);recordsUnsub=q.onSnapshot(snap=>{currentRecords=snap.docs.map(doc=>({id:doc.id,...doc.data()}));currentRecords.sort((a,b)=>String(a.ngay||'').localeCompare(String(b.ngay||'')));renderData();},err=>{$('data-status').innerText='Không tải được dữ liệu: '+err.message;console.error(err);});}
+    function renderData(){const filter=$('employee-filter')?.value||'ALL';let rows=currentRecords;if(isAdmin&&filter!=='ALL')rows=rows.filter(d=>d.uid===filter);let h=0,ot=0,pay=0;const days=new Set();const summary=new Map();let html='';rows.forEach(d=>{const regular=Number(d.gio_lam)||0,extra=Number(d.tang_ca)||0,amount=Number(d.thanh_tien)||0;h+=regular;ot+=extra;pay+=amount;if(d.uid&&d.ngay)days.add(`${d.uid}_${d.ngay}`);const key=d.uid||d.ho_ten||'unknown';if(!summary.has(key))summary.set(key,{name:d.ho_ten||key,days:new Set(),h:0,ot:0,pay:0});const s=summary.get(key);if(d.ngay)s.days.add(d.ngay);s.h+=regular;s.ot+=extra;s.pay+=amount;const canEdit=isAdmin||d.uid===auth.currentUser.uid;html+=`<tr><td>${esc(d.ngay||'')}</td><td>${esc(d.ho_ten||'')}</td><td>${esc(d.gio_vao||'')}–${esc(d.gio_ra||'')}</td><td>${regular.toFixed(2)}</td><td>${extra.toFixed(2)}</td><td>${money(d.he_so_luong||DEFAULT_BASE_RATE)}</td><td>${money(amount)}</td><td class="no-print">${canEdit?`<button class="warning small" onclick="editData('${d.id}')">Sửa</button> <button class="danger small" onclick="deleteData('${d.id}')">Xóa</button>`:'—'}</td></tr>`;});$('dataBody').innerHTML=html||'<tr><td colspan="8">Không có dữ liệu trong tháng này.</td></tr>';$('dataFooter').innerHTML=`<tr><td colspan="3">TỔNG: ${days.size} ngày công</td><td>${h.toFixed(2)} giờ</td><td>${ot.toFixed(2)} giờ</td><td>—</td><td>${money(pay)}</td><td class="no-print"></td></tr>`;$('data-status').innerText=`Đang hiển thị ${rows.length} bản ghi · Tháng ${$('filterMonthYear').value}`;if(isAdmin){$('metric-pay').innerText=money(pay);$('metric-days').innerText=days.size.toLocaleString('vi-VN');$('metric-hours').innerText=h.toFixed(2)+' giờ';$('metric-ot').innerText=ot.toFixed(2)+' giờ';$('employee-summary-body').innerHTML=[...summary.values()].sort((a,b)=>a.name.localeCompare(b.name,'vi')).map(s=>`<tr><td>${esc(s.name)}</td><td>${s.days.size}</td><td>${s.h.toFixed(2)}</td><td>${s.ot.toFixed(2)}</td><td>${money(s.pay)}</td></tr>`).join('')||'<tr><td colspan="5">Chưa có dữ liệu.</td></tr>';}}
+    async function exportExcel(){if(typeof XLSX==='undefined')return alert('Thư viện Excel chưa tải được. Kiểm tra kết nối mạng.');const filter=$('employee-filter')?.value||'ALL',rows=(isAdmin&&filter!=='ALL'?currentRecords.filter(d=>d.uid===filter):currentRecords);const data=rows.map(d=>({'Ngày':d.ngay||'','Tên nhân viên':d.ho_ten||'','Email':d.email||'','Giờ vào':d.gio_vao||'','Giờ ra':d.gio_ra||'','Giải lao (phút)':Number(d.giai_lao)||0,'Giờ thường':Number(d.gio_lam)||0,'Giờ tăng ca':Number(d.tang_ca)||0,'Lương/giờ (¥)':Number(d.he_so_luong)||DEFAULT_BASE_RATE,'Thành tiền (¥)':Number(d.thanh_tien)||0,'UID':d.uid||''}));data.push({});data.push({'Ngày':'TỔNG','Tên nhân viên':`${new Set(rows.filter(d=>d.uid&&d.ngay).map(d=>`${d.uid}_${d.ngay}`)).size} ngày công`,'Giờ thường':rows.reduce((a,d)=>a+(Number(d.gio_lam)||0),0),'Giờ tăng ca':rows.reduce((a,d)=>a+(Number(d.tang_ca)||0),0),'Thành tiền (¥)':rows.reduce((a,d)=>a+(Number(d.thanh_tien)||0),0)});const wb=XLSX.utils.book_new(),ws=XLSX.utils.json_to_sheet(data);XLSX.utils.book_append_sheet(wb,ws,'Bang luong');XLSX.writeFile(wb,`Bang_luong_${$('filterMonthYear').value}.xlsx`);}
+    async function backupJSON(){try{let snap;if(isAdmin)snap=await db.collection('bang_luong').get();else snap=await db.collection('bang_luong').where('uid','==',auth.currentUser.uid).get();const data=snap.docs.map(d=>({id:d.id,...d.data()}));const payload={backup_created_at:new Date().toISOString(),project:'quanlyluong2026',collection:'bang_luong',records:data};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`sao_luu_bang_luong_${localDate()}.json`;a.click();URL.revokeObjectURL(url);alert(`Đã tải bản sao lưu ${data.length} bản ghi. Hãy cất file ở nơi an toàn.`);}catch(e){alert('Không sao lưu được: '+e.message);}}
+    async function loadAuditLogs(){if(!isAdmin)return;try{const snap=await db.collection('nhat_ky_chinh_sua').orderBy('thoi_diem','desc').limit(100).get();$('audit-body').innerHTML=snap.docs.map(doc=>{const d=doc.data(),dt=d.thoi_diem?.toDate?d.thoi_diem.toDate().toLocaleString('vi-VN'):d.thoi_diem_client||'';return `<tr><td>${esc(dt)}</td><td>${esc(d.nguoi_thuc_hien_email||d.nguoi_thuc_hien_uid||'')}</td><td>${esc(d.hanh_dong||'')}</td><td>${esc(d.ho_ten||d.uid||'')}</td><td style="text-align:left">${esc(d.chi_tiet||'')}</td></tr>`;}).join('')||'<tr><td colspan="5">Chưa có nhật ký.</td></tr>';}catch(e){$('audit-body').innerHTML=`<tr><td colspan="5">Không tải được nhật ký: ${esc(e.message)}. Hãy cập nhật Firestore Rules.</td></tr>`;}}
+    async function initApp(user){isAdmin=isAdminUser(user);$('auth-section').classList.add('hidden');$('main-content').classList.remove('hidden');$('user-name').innerText=user.displayName||user.email;$('role-badge').innerText=isAdmin?'QUẢN TRỊ VIÊN':'NHÂN VIÊN';$('admin-dashboard').classList.toggle('hidden',!isAdmin);$('admin-warning').classList.toggle('hidden',!isAdmin);$('wage-admin').classList.remove('hidden');$('audit-card').classList.toggle('hidden',!isAdmin);$('target-employee-wrap').classList.toggle('hidden',!isAdmin);$('employee-filter-wrap').classList.toggle('hidden',!isAdmin);initFilter();$('workDate').value=localDate();$('wage-effective-date').value=localDate();await loadBaseRate();try{await refreshEmployees();}catch(e){console.error('Không tải danh sách nhân viên:',e);alert('Không tải được danh sách nhân viên. Kiểm tra Firestore Rules.');}try{await loadWageHistory();}catch(e){console.warn(e);}if(!isAdmin){$('target-employee').value=user.uid;$('target-employee').disabled=true;$('wage-employee').value=user.uid;$('wage-employee').disabled=true;}await onTargetEmployeeChange();loadData();if(isAdmin)loadAuditLogs();}
+    auth.onAuthStateChanged(user=>{if(user)initApp(user);else{$('auth-section').classList.remove('hidden');$('main-content').classList.add('hidden');}});
+</script></body></html>
